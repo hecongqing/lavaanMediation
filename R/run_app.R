@@ -1,7 +1,7 @@
-#' 启动 Shiny 中介分析 App
+#' Launch the Shiny mediation app
 #' @export
 run_app <- function() {
   app_dir <- system.file("app", package = "lavaanMediation")
-  if (app_dir == "") stop("App 目录未找到，请确认已正确安装该包。", call. = FALSE)
+  if (identical(app_dir, "")) stop("App directory not found. Please ensure the package is correctly installed.", call. = FALSE)
   shiny::runApp(app_dir, display.mode = "normal")
 }

@@ -8,40 +8,40 @@ ui <- page_fluid(
   titlePanel("Mediation Demo: X → M → Y (lavaan)"),
   layout_sidebar(
     sidebar = sidebar(
-      fileInput("file", "上传 CSV（可选）", accept = ".csv"),
-      checkboxInput("use_demo", "使用内置演示数据（若不上传文件）", TRUE),
+      fileInput("file", "Upload CSV (optional)", accept = ".csv"),
+      checkboxInput("use_demo", "Use built-in demo data (if no file is uploaded)", TRUE),
       uiOutput("var_selectors"),
-      numericInput("nboot", "Bootstrap 次数（间接效应置信区间）", value = 500, min = 100, step = 100),
-      actionButton("run", "运行分析", class = "btn-primary")
+      numericInput("nboot", "Bootstrap reps (CI for indirect effect)", value = 500, min = 100, step = 100),
+      actionButton("run", "Run analysis", class = "btn-primary")
     ),
     card(
-      card_header("模型设定"),
+      card_header("Model specification"),
       verbatimTextOutput("model_txt")
     ),
     card(
-      card_header("关键结果"),
+      card_header("Key results"),
       navset_pill(
-        nav_panel("概览", verbatimTextOutput("summary")),
-        nav_panel("参数表", tableOutput("pe")),
-        nav_panel("路径图", plotOutput("path_plot", height = "520px"))
+        nav_panel("Overview", verbatimTextOutput("summary")),
+        nav_panel("Parameter table", tableOutput("pe")),
+        nav_panel("Path diagram", plotOutput("path_plot", height = "520px"))
       )
     )
   )
 )
 
 server <- function(input, output, session) {
-  
-  # 读取/准备数据：优先用户上传，否则使用内置模拟数据
+
+  # Read/prepare data: prefer uploaded file, otherwise use built-in simulated data
   dat <- reactive({
     req(input$use_demo || !is.null(input$file))
-    
+
     if (!is.null(input$file)) {
       df <- tryCatch(read.csv(input$file$datapath), error = function(e) NULL)
-      validate(need(!is.null(df), "无法读取 CSV，请检查文件格式。"))
+      validate(need(!is.null(df), "Failed to read CSV. Please check the file format."))
       return(df)
     }
-    
-    # 简单可复现实验数据：X→M→Y
+
+    # Simple reproducible toy data: X → M → Y
     set.seed(123)
     n <- 300
     X <- rnorm(n, 0, 1)
@@ -49,57 +49,57 @@ server <- function(input, output, session) {
     Y <- 0.6*M + 0.2*X + rnorm(n, 0, 1)
     data.frame(X = X, M = M, Y = Y)
   })
-  
-  # 动态生成变量选择框
+
+  # Dynamic variable selectors
   output$var_selectors <- renderUI({
     cols <- names(dat())
     tagList(
-      selectInput("xvar", "X（自变量）", choices = cols, selected = cols[1]),
-      selectInput("mvar", "M（中介）",   choices = cols, selected = cols[2]),
-      selectInput("yvar", "Y（因变量）", choices = cols, selected = cols[3])
+      selectInput("xvar", "X (independent variable)", choices = cols, selected = cols[1]),
+      selectInput("mvar", "M (mediator)",            choices = cols, selected = cols[2]),
+      selectInput("yvar", "Y (dependent variable)",  choices = cols, selected = cols[3])
     )
   })
-  
-  # 根据选择自动生成 lavaan 模型语句
+
+  # Auto-generate lavaan model string from selections
   model_string <- reactive({
     req(input$xvar, input$mvar, input$yvar)
     sprintf('
-      # 中介路径
+      # Mediation paths
       %s ~ a*%s
       %s ~ b*%s + cprime*%s
 
-      # 间接效应与总效应
+      # Indirect & total effects
       indirect := a*b
       total := cprime + (a*b)
-    ', input$mvar, input$xvar, input$yvar, input$mvar, input$xvar)
+    ', input$mvar, input$xvar, input@yvar, input$mvar, input$xvar)
   })
-  
+
   output$model_txt <- renderText(model_string())
-  
-  # 运行 lavaan（click 触发）
+
+  # Fit lavaan model (on click)
   fit_obj <- eventReactive(input$run, {
     df <- dat()
     mdl <- model_string()
-    # 使用 bootstrap 估计置信区间
+    # Use bootstrap for CIs
     sem(mdl, data = df, se = "bootstrap", bootstrap = input$nboot)
   }, ignoreInit = TRUE)
-  
-  # 概览（带标准化）
+
+  # Overview (with standardized estimates)
   output$summary <- renderText({
     req(fit_obj())
     txt <- capture.output(summary(fit_obj(), standardized = TRUE, fit.measures = TRUE))
     paste(txt, collapse = "\n")
   })
-  
-  # 参数表（包含间接效应/总效应、标准化、置信区间）
+
+  # Parameter table (includes indirect/total effects, standardized, CIs)
   output$pe <- renderTable({
     req(fit_obj())
     parameterEstimates(
       fit_obj(), standardized = TRUE, ci = TRUE, level = 0.95, boot.ci.type = "perc"
     )[, c("lhs","op","rhs","label","est","se","z","pvalue","ci.lower","ci.upper","std.all")]
   })
-  
-  # 路径图（标准化路径系数）
+
+  # Path diagram (standardized path coefficients)
   output$path_plot <- renderPlot({
     req(fit_obj())
     semPaths(
