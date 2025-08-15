@@ -5,3 +5,4 @@ run_app <- function() {
   if (identical(app_dir, "")) stop("App directory not found. Please ensure the package is correctly installed.", call. = FALSE)
   shiny::runApp(app_dir, display.mode = "normal")
 }
+

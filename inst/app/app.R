@@ -71,7 +71,7 @@ server <- function(input, output, session) {
       # Indirect & total effects
       indirect := a*b
       total := cprime + (a*b)
-    ', input$mvar, input$xvar, input@yvar, input$mvar, input$xvar)
+    ', input$mvar, input$xvar, input$yvar, input$mvar, input$xvar)
   })
 
   output$model_txt <- renderText(model_string())
