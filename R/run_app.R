@@ -21,7 +21,6 @@ run_app <- function(launch.browser = interactive(), ...) {
   shiny::runApp(
     appDir = app_dir,
     launch.browser = launch.browser,
-    display.mode = "normal",
     ...
   )
 }

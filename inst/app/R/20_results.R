@@ -171,58 +171,45 @@ build_main_effect_table_html <- function(pe, xvar, yvar, zvars = character(0)) {
   headers <- c("Path", "b", "β", "SE", "z", "p", "ci.lower", "ci.upper")
   build_html_table("Main effect model", main_data, headers, "No main effects found")
 }
-calculate_r_squared <- function(fit) {
+extract_r_squared <- function(fit) {
   tryCatch({
-    # 获取R²值
-    r_squared <- lavInspect(fit, "r2")
-
-    # 获取标准化参数估计
-    pe_std <- parameterEstimates(fit, standardized = TRUE)
-
-    # 计算每个内生变量的R²
-    endogenous_vars <- unique(pe_std$lhs[pe_std$op == "~"])
-
-    r2_results <- list()
-
-    for (var in endogenous_vars) {
-      if (var %in% names(r_squared)) {
-        # 未校正的R²
-        r2_uncorrected <- r_squared[[var]]
-
-        # 计算校正效应保留的R²
-        # 这通常涉及考虑测量误差和模型复杂性
-        # 这里使用一个简化的校正方法
-        n_obs <- lavInspect(fit, "nobs")
-        n_params <- sum(pe_std$op == "~" & pe_std$lhs == var)
-
-        # 校正公式：R²_adj = 1 - (1 - R²) * (n-1)/(n-p-1)
-        if (n_obs > n_params + 1) {
-          r2_corrected <- 1 - (1 - r2_uncorrected) * (n_obs - 1) / (n_obs - n_params - 1)
-        } else {
-          r2_corrected <- r2_uncorrected
-        }
-
-        r2_results[[var]] <- list(
-          uncorrected = r2_uncorrected,
-          corrected = r2_corrected
-        )
-      }
-    }
-
-    return(r2_results)
-  }, error = function(e) {
-    return(list())
-  })
+    values <- lavInspect(fit, "r2")
+    result <- as.numeric(values)
+    names(result) <- names(values)
+    result
+  }, error = function(e) numeric(0))
 }
 
-# --------- 组装"按红色标注"的 Model fit HTML 表 ----------
-build_model_fit_html <- function(fit, digits = 3, boot = NULL, nboot_input = NULL) {
+build_r2_comparison_data <- function(fit, main_effect_fit, yvar) {
+  full_r2 <- extract_r_squared(fit)
+  if (length(full_r2) == 0 || is.null(names(full_r2))) {
+    return(data.frame(
+      Variable = character(0),
+      R2_uncorrected = numeric(0),
+      R2_corrected = numeric(0),
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  main_r2 <- extract_r_squared(main_effect_fit)
+  corrected <- full_r2
+  if (yvar %in% names(full_r2) && yvar %in% names(main_r2) &&
+      !is.na(main_r2[[yvar]])) {
+    corrected[[yvar]] <- main_r2[[yvar]]
+  }
+
+  data.frame(
+    Variable = names(full_r2),
+    R2_uncorrected = as.numeric(full_r2),
+    R2_corrected = as.numeric(corrected),
+    stringsAsFactors = FALSE
+  )
+}
+
+# --------- Model fit HTML table ----------
+build_model_fit_html <- function(fit, digits = 3, boot = NULL) {
   fm  <- fitMeasures(fit)
   est <- toupper(lavInspect(fit, "options")$estimator %||% "ML")
-  optm <- tryCatch({
-    opt <- lavTech(fit, "optim")
-    as.character(opt$optimizer %||% opt$optim.method %||% NA_character_)
-  }, error = function(e) NA_character_)
 
   npar <- get1(fm,"npar")
   nobs <- get1(fm,"ntotal")
@@ -234,9 +221,6 @@ build_model_fit_html <- function(fit, digits = 3, boot = NULL, nboot_input = NUL
   }
   chisq <- get1(fm,"chisq")
   df <- get1(fm,"df")
-  base_chisq <- get1(fm,"baseline.chisq")
-  base_df <- get1(fm,"baseline.df")
-  base_p <- get1(fm,"baseline.pvalue")
   cfi <- get1(fm,"cfi")
   tli <- get1(fm,"tli")
   aic <- get1(fm,"aic")
@@ -245,19 +229,20 @@ build_model_fit_html <- function(fit, digits = 3, boot = NULL, nboot_input = NUL
   rmsea <- get1(fm,"rmsea")
   lo <- get1(fm,"rmsea.ci.lower")
   hi <- get1(fm,"rmsea.ci.upper")
-  pclose <- get1(fm,"rmsea.pclose")
   srmr <- get1(fm,"srmr")
 
   # 格式化RMSEA置信区间
   rmsea_ci <- if (is.na(rmsea)) NA_character_ else sprintf("%.3f (%.3f, %.3f)", rmsea, lo, hi)
 
   boot_n <- NA_integer_
+  boot_successful <- NA_integer_
   if (!is.null(boot) && !is.null(boot$n_samples)) {
     boot_n <- boot$n_samples
   } else if (!is.null(boot) && !is.null(boot$samples)) {
     boot_n <- if (is.matrix(boot$samples)) nrow(boot$samples) else length(boot$samples)
-  } else if (!is.null(nboot_input) && !is.na(nboot_input)) {
-    boot_n <- as.integer(nboot_input)
+  }
+  if (!is.null(boot) && !is.null(boot$successful_samples)) {
+    boot_successful <- boot$successful_samples
   }
 
   # 创建基本信息表格
@@ -278,6 +263,10 @@ build_model_fit_html <- function(fit, digits = 3, boot = NULL, nboot_input = NUL
       tags$tr(
         tags$td(style="font-weight:bold;", "Number of bootstrap samples"),
         tags$td(if (is.na(boot_n)) "N/A" else as.character(boot_n))
+      ),
+      tags$tr(
+        tags$td(style="font-weight:bold;", "Successful bootstrap samples"),
+        tags$td(if (is.na(boot_successful)) "N/A" else as.character(boot_successful))
       )
     )
   )
@@ -322,8 +311,8 @@ build_model_fit_html <- function(fit, digits = 3, boot = NULL, nboot_input = NUL
   )
 }
 
-# --------- Model Fit 下载表 ----------
-build_model_fit_download_data <- function(fit, boot = NULL, nboot_input = NULL) {
+# --------- Model Fit download data ----------
+build_model_fit_download_data <- function(fit, boot = NULL) {
   fm <- fitMeasures(fit)
   estimator <- toupper(lavInspect(fit, "options")$estimator %||% "ML")
 
@@ -336,17 +325,19 @@ build_model_fit_download_data <- function(fit, boot = NULL, nboot_input = NULL) 
   }
 
   boot_n <- NA_integer_
+  boot_successful <- NA_integer_
   if (!is.null(boot) && !is.null(boot$n_samples)) {
     boot_n <- boot$n_samples
   } else if (!is.null(boot) && !is.null(boot$samples)) {
     boot_n <- if (is.matrix(boot$samples)) nrow(boot$samples) else length(boot$samples)
-  } else if (!is.null(nboot_input) && !is.na(nboot_input)) {
-    boot_n <- as.integer(nboot_input)
+  }
+  if (!is.null(boot) && !is.null(boot$successful_samples)) {
+    boot_successful <- boot$successful_samples
   }
 
   data.frame(
     Section = c(
-      rep("Model Information", 4),
+      rep("Model Information", 5),
       rep("Model Fit Indices", 11)
     ),
     Metric = c(
@@ -354,6 +345,7 @@ build_model_fit_download_data <- function(fit, boot = NULL, nboot_input = NULL) 
       "Number of model parameters",
       "Number of observations",
       "Number of bootstrap samples",
+      "Successful bootstrap samples",
       "chi-square",
       "df",
       "CFI",
@@ -371,6 +363,7 @@ build_model_fit_download_data <- function(fit, boot = NULL, nboot_input = NULL) 
       get1(fm, "npar"),
       nobs,
       boot_n,
+      boot_successful,
       get1(fm, "chisq"),
       get1(fm, "df"),
       get1(fm, "cfi"),
@@ -390,13 +383,11 @@ build_model_fit_download_data <- function(fit, boot = NULL, nboot_input = NULL) 
 # --------- Parameter Estimates 下载表 ----------
 build_parameter_estimates_download_data <- function(
   fit,
-  data,
-  model_type,
+  main_effect_fit,
   xvar,
   yvar,
   mvars = character(0),
   zvars = character(0),
-  main_effect_r2 = NA_real_,
   boot = NULL
 ) {
   mediation_pe <- parameterEstimates(
@@ -441,15 +432,6 @@ build_parameter_estimates_download_data <- function(
     )
   )
 
-  main_effect_parts <- c(paste0(yvar, " ~ ", xvar))
-  if (length(zvars) > 0) {
-    main_effect_parts <- c(main_effect_parts, paste0(yvar, " ~ ", zvars))
-  }
-  main_effect_fit <- sem(
-    paste(main_effect_parts, collapse = "\n"),
-    data = data,
-    se = "standard"
-  )
   main_effect_pe <- parameterEstimates(
     main_effect_fit,
     standardized = TRUE,
@@ -487,19 +469,15 @@ build_parameter_estimates_download_data <- function(
   main_effect_pe <- ensure_export_columns(main_effect_pe)
   mediation_pe <- ensure_export_columns(mediation_pe)
 
-  r2_values <- calculate_r_squared(fit)
+  r2_comparison <- build_r2_comparison_data(fit, main_effect_fit, yvar)
   r2_data <- data.frame()
-  if (length(r2_values) > 0) {
-    r2_data <- do.call(rbind, lapply(names(r2_values), function(var_name) {
-      r2_corrected <- if (identical(var_name, yvar) && !is.na(main_effect_r2)) {
-        main_effect_r2
-      } else {
-        r2_values[[var_name]]$uncorrected
-      }
+  if (nrow(r2_comparison) > 0) {
+    r2_data <- do.call(rbind, lapply(seq_len(nrow(r2_comparison)), function(i) {
+      r2_row <- r2_comparison[i, ]
       data.frame(
         Model = "R2 values",
-        Path = var_name,
-        lhs = var_name,
+        Path = r2_row$Variable,
+        lhs = r2_row$Variable,
         op = "r2",
         rhs = "",
         label = "",
@@ -511,8 +489,8 @@ build_parameter_estimates_download_data <- function(
         ci.upper = NA_real_,
         std.lv = NA_real_,
         std.all = NA_real_,
-        R2_uncorrected = r2_values[[var_name]]$uncorrected,
-        R2_corrected = r2_corrected,
+        R2_uncorrected = r2_row$R2_uncorrected,
+        R2_corrected = r2_row$R2_corrected,
         stringsAsFactors = FALSE
       )
     }))

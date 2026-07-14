@@ -7,6 +7,7 @@
 ^CITATION\.cff$
 ^QUICKSTART\.md$
 ^USAGE\.md$
+^README\.zh-CN\.md$
 ^start_app\.R$
 ^deploy_app\.R$
 ^inst/app/rsconnect$

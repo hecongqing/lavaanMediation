@@ -1,12 +1,46 @@
 # Model specification and bootstrap helpers.
 
-boot_indirect_ci <- function(model_string, data, R = 500, progress_cb = NULL, session = shiny::getDefaultReactiveDomain(), seed = NULL) {
-  if (!is.null(seed) && !is.na(seed)) {
+require_converged_fit <- function(fit, label = "Model") {
+  converged <- tryCatch(
+    isTRUE(lavInspect(fit, "converged")),
+    error = function(e) FALSE
+  )
+  if (!converged) {
+    stop(paste0(label, " did not converge."), call. = FALSE)
+  }
+  fit
+}
+
+boot_indirect_ci <- function(
+  model_string,
+  data,
+  R = 500,
+  progress_cb = NULL,
+  seed = NULL
+) {
+  if (length(R) != 1 || !is.numeric(R) || is.na(R) || !is.finite(R) ||
+      R < 1 || R != as.integer(R)) {
+    stop("R must be a positive integer.", call. = FALSE)
+  }
+  R <- as.integer(R)
+
+  if (!is.data.frame(data) || nrow(data) < 3) {
+    stop("Bootstrap data must contain at least three rows.", call. = FALSE)
+  }
+
+  if (!is.null(seed) && length(seed) == 1 && !is.na(seed)) {
+    if (!is.numeric(seed) || !is.finite(seed) || seed < 0 ||
+        seed != as.integer(seed)) {
+      stop("seed must be a non-negative integer or NA.", call. = FALSE)
+    }
     set.seed(as.integer(seed))
+  } else if (!is.null(seed) && (length(seed) != 1 || length(seed) == 0)) {
+    stop("seed must be a non-negative integer or NA.", call. = FALSE)
   }
 
   n <- nrow(data)
   reference_fit <- sem(model_string, data = data, se = "none")
+  require_converged_fit(reference_fit, "Reference model")
   reference_pe <- parameterEstimates(reference_fit, standardized = TRUE)
   effect_names <- reference_pe$lhs[
     reference_pe$op == ":=" & grepl("indirect", reference_pe$lhs)
@@ -22,6 +56,7 @@ boot_indirect_ci <- function(model_string, data, R = 500, progress_cb = NULL, se
     idx   <- sample.int(n, n, replace = TRUE)
     pe_b <- tryCatch({
       fit_b <- sem(model_string, data = data[idx, , drop = FALSE], se = "none")
+      require_converged_fit(fit_b, "Bootstrap model")
       parameterEstimates(fit_b, standardized = TRUE)
     }, error = function(e) NULL)
 
@@ -32,8 +67,6 @@ boot_indirect_ci <- function(model_string, data, R = 500, progress_cb = NULL, se
       out[i, valid] <- ind$est[matched[valid]]
     }
     if (!is.null(progress_cb)) progress_cb(i, R)
-    # 轻微让出 UI 刷新机会
-    if (i %% 5 == 0) Sys.sleep(0.001)
   }
 
   cis <- NULL
@@ -45,7 +78,7 @@ boot_indirect_ci <- function(model_string, data, R = 500, progress_cb = NULL, se
   successful_samples <- if (ncol(out) == 0) {
     0L
   } else {
-    sum(rowSums(!is.na(out)) > 0)
+    sum(rowSums(!is.na(out)) == ncol(out))
   }
 
   list(
@@ -54,6 +87,14 @@ boot_indirect_ci <- function(model_string, data, R = 500, progress_cb = NULL, se
     n_samples = R,
     successful_samples = successful_samples
   )
+}
+
+build_main_effect_model <- function(yvar, xvar, zvars = character(0)) {
+  parts <- c(paste0(yvar, " ~ ", xvar))
+  if (length(zvars) > 0) {
+    parts <- c(parts, paste0(yvar, " ~ ", zvars))
+  }
+  paste(parts, collapse = "\n")
 }
 
 # --------- 生成中介模型字符串 ----------

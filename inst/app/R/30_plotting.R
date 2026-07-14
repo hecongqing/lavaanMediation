@@ -78,9 +78,7 @@ make_layout_mediation_multi <- function(
   fit,
   xvars = NULL, mvars = NULL, yvars = NULL, zvars = NULL,
   patt_x="^X(\\d+)?$", patt_m="^M(\\d+)?$", patt_y="^Y(\\d+)?$", patt_z="^Z(\\d+)?$",
-  y_m=0.72, y_xy=0.40, z_above_y_offset=0.30,   # Z 相对 Y 的竖直偏移
-  z_left_dx=c(0.18, 0.06),                      # Z 相对 Y 的水平范围：左移 [0.18, 0.06]
-  wiggle_m=TRUE
+  y_m=0.72, y_xy=0.40
 ){
   m <- semPlot::semPlotModel(fit)
   labs <- tryCatch(m@Vars$name, error=function(e) m$Vars$name)
@@ -218,13 +216,6 @@ make_layout_mediation_multi <- function(
   }
 
   lay
-}
-build_main_effect_model <- function(yvar, xvar, zvars = character(0)) {
-  parts <- c(paste0(yvar, " ~ ", xvar))
-  if (length(zvars) > 0) {
-    parts <- c(parts, paste0(yvar, " ~ ", zvars))
-  }
-  paste(parts, collapse = "\n")
 }
 
 build_sem_paths_plot <- function(fit_obj, layout_obj, include_errors) {

@@ -44,6 +44,8 @@ app_server <- function(input, output, session) {
                M6=M6, M7=M7, M8=M8, M9=M9, M10=M10, Z1=Z1, Z2=Z2, Z3=Z3, Y=Y)
   })
 
+  fit_result <- reactiveVal(NULL)
+
   # No fixed mediator count; number inferred from selected M variables
 
   # 动态变量选择
@@ -104,8 +106,13 @@ app_server <- function(input, output, session) {
 
   # 模型描述
   output$model_description <- renderUI({
-    model_type <- input$model_type
-    n_mediators <- if (!is.null(input$mvar)) length(input$mvar) else 0
+    result <- fit_result()
+    model_type <- if (is.null(result)) input$model_type else result$model_type
+    n_mediators <- if (is.null(result)) {
+      if (!is.null(input$mvar)) length(input$mvar) else 0
+    } else {
+      length(result$mvars)
+    }
 
     descriptions <- list(
       "B1" = "Basic mediation model: X → M → Y [direct effect included]",
@@ -128,7 +135,7 @@ app_server <- function(input, output, session) {
 
 
 
-  # —— 左侧：两张PDF示意图的模型选择 ——
+  # Concept-model image selector.
   output$concept_picker <- renderUI({
     tags$div(
       fluidRow(
@@ -146,11 +153,11 @@ app_server <- function(input, output, session) {
 
 
   output$concept_left <- renderUI({
-    concept_img_or_pdf("concept_b1")
+    concept_image("concept_b1.png", "B1 mediation model")
   })
 
   output$concept_right <- renderUI({
-    concept_img_or_pdf("concept_c2")
+    concept_image("concept_c2.png", "C2 mediation model with covariates")
   })
 
   observeEvent(input$concept_pick_left, {
@@ -188,27 +195,45 @@ app_server <- function(input, output, session) {
     generate_mediation_model(input$xvar, mvars, input$yvar, zvars, input$model_type)
   })
 
-  output$model_txt <- renderText(model_string())
-
-  # 创建一个reactive值来存储拟合结果
-  fit_result <- reactiveVal(NULL)
+  # Any change to an analysis input invalidates the fitted result. This avoids
+  # combining an old fit with new variable labels or Bootstrap settings.
+  observeEvent(
+    list(
+      input$file,
+      input$use_demo,
+      input$model_type,
+      input$xvar,
+      input$mvar,
+      input$yvar,
+      input$zvar,
+      input$nboot,
+      input$seed
+    ),
+    {
+      if (!is.null(fit_result())) fit_result(NULL)
+    },
+    ignoreInit = TRUE
+  )
 
   # 观察Run Analysis按钮点击
   observeEvent(input$run, {
     df <- dat()
     mdl <- model_string()
 
+    model_type <- input$model_type
+    xvar <- input$xvar
+    yvar <- input$yvar
     mvars <- if (!is.null(input$mvar)) input$mvar else character(0)
-    zvars <- if (identical(input$model_type, "C2") && !is.null(input$zvar)) {
+    zvars <- if (identical(model_type, "C2") && !is.null(input$zvar)) {
       input$zvar
     } else {
       character(0)
     }
     validation_error <- validate_analysis_selection(
       data = df,
-      model_type = input$model_type,
-      xvar = input$xvar,
-      yvar = input$yvar,
+      model_type = model_type,
+      xvar = xvar,
+      yvar = yvar,
       mvars = mvars,
       zvars = zvars
     )
@@ -230,6 +255,7 @@ app_server <- function(input, output, session) {
         # 1) 常规拟合
         incProgress(0.3, detail = "Fitting main model...")
         fit0 <- sem(mdl, data = df, se = "standard")
+        require_converged_fit(fit0, "Mediation model")
 
         # 2) Bootstrap（如果模型包含间接效应）
         boot <- NULL
@@ -259,36 +285,27 @@ app_server <- function(input, output, session) {
                            duration = 3)
         }
 
-        # 3) 计算主效应模型的R²
-        incProgress(0.9, detail = "Calculating main-effect model R²...")
-        main_effect_r2 <- tryCatch({
-          # 创建主效应模型
-          if (input$model_type == "C2" && !is.null(input$zvar) && length(input$zvar) > 0) {
-            main_effect_parts <- paste0(input$yvar, " ~ ", input$xvar)
-            for (z in input$zvar) {
-              main_effect_parts <- c(main_effect_parts, paste0(input$yvar, " ~ ", z))
-            }
-            main_effect_model <- paste(main_effect_parts, collapse = "\n")
-          } else {
-            main_effect_model <- paste0(input$yvar, " ~ ", input$xvar)
-          }
-
-          # 拟合主效应模型并获取R²
-          fit_main <- sem(main_effect_model, data = df)
-          main_r2 <- lavInspect(fit_main, "r2")
-          if (input$yvar %in% names(main_r2)) {
-            main_r2[[input$yvar]]
-          } else {
-            NA_real_
-          }
-        }, error = function(e) {
-          NA_real_
-        })
+        # 3) Fit the main-effect model once and reuse it for every output.
+        incProgress(0.9, detail = "Fitting main-effect model...")
+        main_effect_model <- build_main_effect_model(yvar, xvar, zvars)
+        fit_main <- sem(main_effect_model, data = df, se = "standard")
+        require_converged_fit(fit_main, "Main-effect model")
 
         incProgress(1, detail = "Complete!")
 
         # 存储结果
-        fit_result(list(fit = fit0, boot = boot, main_effect_r2 = main_effect_r2))
+        fit_result(list(
+          fit = fit0,
+          main_effect_fit = fit_main,
+          boot = boot,
+          data = df,
+          model_string = mdl,
+          model_type = model_type,
+          xvar = xvar,
+          yvar = yvar,
+          mvars = mvars,
+          zvars = zvars
+        ))
 
         # 显示完成通知
         showNotification("Analysis completed successfully!", type = "message", duration = 3)
@@ -308,78 +325,51 @@ app_server <- function(input, output, session) {
     !is.null(fit_result())
   })
   outputOptions(output, "hasFit", suspendWhenHidden = FALSE)
-  output$fit_html <- renderUI({
+  output$model_txt <- renderText({
     req(fit_result())
+    fit_result()$model_string
+  })
+  output$fit_html <- renderUI({
+    result <- fit_result()
+    req(result)
     build_model_fit_html(
-      fit_result()$fit,
+      result$fit,
       digits = 3,
-      boot = fit_result()$boot,
-      nboot_input = input$nboot
+      boot = result$boot
     )
   })
 
   # 数据预览
   output$data_preview <- renderTable({
-    req(dat())
-    df <- dat()
+    result <- fit_result()
+    req(result)
+    df <- result$data
     n_rows <- if (!is.null(input$n_preview)) input$n_preview else 5
     head(df, n_rows)
   }, rownames = TRUE)
 
   # 参数估计表
   output$pe <- renderUI({
-    req(fit_result())
-    fit <- fit_result()$fit
-    boot <- fit_result()$boot
-    model_type <- input$model_type
-    xvar <- input$xvar
-    yvar <- input$yvar
-    mvars <- if (!is.null(input$mvar) && length(input$mvar) > 0) input$mvar else character(0)
-    zvars <- if (model_type == "C2" &&
-                 !is.null(input$zvar) && length(input$zvar) > 0) {
-      input$zvar
-    } else {
-      character(0)
-    }
+    result <- fit_result()
+    req(result)
+    fit <- result$fit
+    main_effect_fit <- result$main_effect_fit
+    boot <- result$boot
+    model_type <- result$model_type
+    xvar <- result$xvar
+    yvar <- result$yvar
+    mvars <- result$mvars
+    zvars <- result$zvars
 
     pe <- parameterEstimates(fit, standardized = TRUE, ci = TRUE, level = 0.95)
 
-    # 这里调用 calculate_r_squared() 取得 R² 结果，
-    # 并在下方把它们组装成页面里显示的 "R² Values" 表格。
-    r2_values <- calculate_r_squared(fit)
+    r2_data <- build_r2_comparison_data(fit, main_effect_fit, yvar)
 
     # 生成 R² Values 表格 HTML（供两个模型类型共用）
     r2_table_html <- {
-      if (length(r2_values) > 0) {
-        r2_data <- data.frame(
-          Variable = character(),
-          R2_uncorrected = character(),
-          R2_corrected = character(),
-          stringsAsFactors = FALSE
-        )
-
-        for (var_name in names(r2_values)) {
-          # R² corrected for effect conservation = R² of Y from main-effect model
-          r2_corrected <- if (var_name == input$yvar) {
-            # For Y variable, use R² from main-effect model
-            main_effect_r2 <- fit_result()$main_effect_r2
-            if (!is.na(main_effect_r2)) {
-              main_effect_r2
-            } else {
-              r2_values[[var_name]]$uncorrected
-            }
-          } else {
-            # For other variables (M), use the same as uncorrected
-            r2_values[[var_name]]$uncorrected
-          }
-
-          r2_data <- rbind(r2_data, data.frame(
-            Variable = var_name,
-            R2_uncorrected = sprintf("%.3f", r2_values[[var_name]]$uncorrected),
-            R2_corrected = sprintf("%.3f", r2_corrected),
-            stringsAsFactors = FALSE
-          ))
-        }
+      if (nrow(r2_data) > 0) {
+        r2_data$R2_uncorrected <- sprintf("%.3f", r2_data$R2_uncorrected)
+        r2_data$R2_corrected <- sprintf("%.3f", r2_data$R2_corrected)
 
         r2_html <- paste0(
           "<h4>R² Values</h4>",
@@ -388,22 +378,25 @@ app_server <- function(input, output, session) {
           "<tbody>"
         )
 
-      for (i in seq_len(nrow(r2_data))) {
-        row <- r2_data[i, ]
-        r2_uncorrected_label <- if (identical(row$Variable, input$yvar)) {
-          paste0("<strong>", row$R2_uncorrected, "</strong>")
-        } else {
-          row$R2_uncorrected
+        for (i in seq_len(nrow(r2_data))) {
+          row <- r2_data[i, ]
+          r2_uncorrected_label <- if (identical(row$Variable, yvar)) {
+            paste0("<strong>", row$R2_uncorrected, "</strong>")
+          } else {
+            row$R2_uncorrected
+          }
+          r2_corrected_label <- if (identical(row$Variable, yvar)) {
+            paste0("<strong>", row$R2_corrected, "</strong>")
+          } else {
+            row$R2_corrected
+          }
+          r2_html <- paste0(
+            r2_html,
+            "<tr><td>", row$Variable, "</td><td>",
+            r2_uncorrected_label, "</td><td>", r2_corrected_label,
+            "</td></tr>"
+          )
         }
-        r2_corrected_label <- if (identical(row$Variable, input$yvar)) {
-          paste0("<strong>", row$R2_corrected, "</strong>")
-        } else {
-          row$R2_corrected
-        }
-        r2_html <- paste0(r2_html,
-          "<tr><td>", row$Variable, "</td><td>", r2_uncorrected_label, "</td><td>", r2_corrected_label, "</td></tr>"
-        )
-      }
 
         r2_html <- paste0(r2_html, "</tbody></table>")
         r2_html
@@ -425,13 +418,12 @@ app_server <- function(input, output, session) {
     }
 
     main_effect_table <- tryCatch({
-      main_effect_parts <- c(paste0(yvar, " ~ ", xvar))
-      if (length(zvars) > 0) {
-        main_effect_parts <- c(main_effect_parts, paste0(yvar, " ~ ", zvars))
-      }
-      main_effect_model <- paste(main_effect_parts, collapse = "\n")
-      fit_main <- sem(main_effect_model, data = dat(), se = "standard")
-      pe_main <- parameterEstimates(fit_main, standardized = TRUE, ci = TRUE, level = 0.95)
+      pe_main <- parameterEstimates(
+        main_effect_fit,
+        standardized = TRUE,
+        ci = TRUE,
+        level = 0.95
+      )
       build_main_effect_table_html(pe_main, xvar, yvar, zvars)
     }, error = function(e) {
       "<h4>Main effect model</h4><p>Unable to estimate main effect model</p>"
@@ -463,11 +455,11 @@ app_server <- function(input, output, session) {
       paste0("model_fit_", format(Sys.Date(), "%Y-%m-%d"), ".csv")
     },
     content = function(file) {
-      req(fit_result())
+      result <- fit_result()
+      req(result)
       model_fit_data <- build_model_fit_download_data(
-        fit_result()$fit,
-        boot = fit_result()$boot,
-        nboot_input = input$nboot
+        result$fit,
+        boot = result$boot
       )
       write.csv(model_fit_data, file, row.names = FALSE, na = "")
     }
@@ -478,29 +470,17 @@ app_server <- function(input, output, session) {
       paste0("parameter_estimates_", format(Sys.Date(), "%Y-%m-%d"), ".csv")
     },
     content = function(file) {
-      req(fit_result())
-
-      model_type <- input$model_type
-      xvar <- input$xvar
-      yvar <- input$yvar
-      mvars <- if (!is.null(input$mvar) && length(input$mvar) > 0) input$mvar else character(0)
-      zvars <- if (model_type == "C2" &&
-                   !is.null(input$zvar) && length(input$zvar) > 0) {
-        input$zvar
-      } else {
-        character(0)
-      }
+      result <- fit_result()
+      req(result)
 
       parameter_data <- build_parameter_estimates_download_data(
-        fit_result()$fit,
-        data = dat(),
-        model_type = model_type,
-        xvar = xvar,
-        yvar = yvar,
-        mvars = mvars,
-        zvars = zvars,
-        main_effect_r2 = fit_result()$main_effect_r2,
-        boot = fit_result()$boot
+        fit = result$fit,
+        main_effect_fit = result$main_effect_fit,
+        xvar = result$xvar,
+        yvar = result$yvar,
+        mvars = result$mvars,
+        zvars = result$zvars,
+        boot = result$boot
       )
       write.csv(parameter_data, file, row.names = FALSE, na = "")
     }
@@ -508,8 +488,10 @@ app_server <- function(input, output, session) {
 
 
   output$path_plot_ui <- renderUI({
+    result <- fit_result()
+    req(result)
     base <- 520
-    kM <- tryCatch(length(input$mvar), error=function(e) 0)
+    kM <- length(result$mvars)
     extra <- max(0, kM - 3) * 200
     # 垂直堆叠两个图，高度加倍
     plotOutput("path_plot", height = paste0((base + extra) * 2, "px"))
@@ -517,13 +499,14 @@ app_server <- function(input, output, session) {
 
 
   output$path_plot <- renderPlot({
-    req(fit_result())
+    result <- fit_result()
+    req(result)
     tryCatch({
-      fit <- fit_result()$fit
-      model_type <- input$model_type
+      fit <- result$fit
+      fit_main <- result$main_effect_fit
+      model_type <- result$model_type
       include_errors <- isTRUE(input$include_errors)
-      zvars <- if (model_type == "C2" &&
-                   !is.null(input$zvar) && length(input$zvar) > 0) input$zvar else character(0)
+      zvars <- result$zvars
 
       old_par <- par(no.readonly = TRUE)
       on.exit(par(old_par), add = TRUE)
@@ -531,12 +514,10 @@ app_server <- function(input, output, session) {
 
       if (model_type == "B1") {
         # 图1: X->Y (Main effect)
-        main_effect_model <- build_main_effect_model(input$yvar, input$xvar)
-        fit_main <- sem(main_effect_model, data = dat())
         layout_main <- make_layout_mediation_multi(
           fit_main,
-          xvars = input$xvar,
-          yvars = input$yvar
+          xvars = result$xvar,
+          yvars = result$yvar
         )
         p1 <- build_sem_paths_plot(fit_main, layout_main, include_errors)
         draw_path_panel(p1, "Main-effect model: X → Y")
@@ -544,9 +525,9 @@ app_server <- function(input, output, session) {
         # 图2: X->M->Y (Mediation)
         my_layout <- make_layout_mediation_multi(
           fit,
-          xvars = input$xvar,
-          yvars = input$yvar,
-          mvars = input$mvar
+          xvars = result$xvar,
+          yvars = result$yvar,
+          mvars = result$mvars
         )
         p2 <- build_sem_paths_plot(fit, my_layout, include_errors)
         p2 <- mark_residual_edges(p2)
@@ -554,12 +535,10 @@ app_server <- function(input, output, session) {
 
       } else if (model_type == "C2") {
         # 图1: X->Y + Z->Y (Main effect)
-        main_effect_model <- build_main_effect_model(input$yvar, input$xvar, zvars)
-        fit_main <- sem(main_effect_model, data = dat())
         layout_main <- make_layout_mediation_multi(
           fit_main,
-          xvars = input$xvar,
-          yvars = input$yvar,
+          xvars = result$xvar,
+          yvars = result$yvar,
           zvars = zvars
         )
         p1 <- build_sem_paths_plot(fit_main, layout_main, include_errors)
@@ -568,9 +547,9 @@ app_server <- function(input, output, session) {
         # 图2: (X→M→Y) + (Z→Y) + (Z→M) (Mediation)
         my_layout <- make_layout_mediation_multi(
           fit,
-          xvars = input$xvar,
-          yvars = input$yvar,
-          mvars = input$mvar,
+          xvars = result$xvar,
+          yvars = result$yvar,
+          mvars = result$mvars,
           zvars = zvars
         )
         p2 <- build_sem_paths_plot(fit, my_layout, include_errors)

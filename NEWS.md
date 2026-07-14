@@ -8,6 +8,10 @@
 - Replaced placeholder package metadata with publishable authorship, licensing, URLs, and dependency declarations.
 - Added unit tests, GitHub Actions checks, contribution guidance, and cleaned repository-only artifacts.
 - Aligned the README and user guide with the currently supported B1 and C2 models.
+- Made English the default README and added a complete Simplified Chinese version.
+- Invalidated stale fitted results when analysis inputs change and bound every output to the fitted configuration.
+- Reused a single main-effect fit across tables, downloads, and diagrams.
+- Removed unused function arguments, duplicate example data, and unreachable PDF fallback assets.
 
 # lavaanMediation 0.1.0
 

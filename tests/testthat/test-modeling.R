@@ -43,6 +43,21 @@ test_that("C2 syntax adds covariate paths to mediators and outcome", {
   expect_match(model, "Y ~ zy2[*]Z2", fixed = FALSE)
 })
 
+test_that("main-effect syntax contains X and all selected covariates", {
+  model <- app_test_env$build_main_effect_model("Y", "X", c("Z1", "Z2"))
+
+  expect_identical(model, "Y ~ X\nY ~ Z1\nY ~ Z2")
+})
+
+test_that("convergence guard returns a converged lavaan fit", {
+  set.seed(9)
+  data <- data.frame(X = rnorm(40))
+  data$Y <- 0.4 * data$X + rnorm(40)
+  fit <- lavaan::sem("Y ~ X", data = data)
+
+  expect_identical(app_test_env$require_converged_fit(fit), fit)
+})
+
 test_that("bootstrap helper returns named indirect-effect samples", {
   set.seed(42)
   data <- data.frame(X = rnorm(60))
@@ -56,6 +71,27 @@ test_that("bootstrap helper returns named indirect-effect samples", {
   expect_identical(colnames(result$samples), "indirect")
   expect_equal(dim(result$cis), c(1L, 2L))
   expect_equal(result$successful_samples, 10)
+})
+
+test_that("bootstrap helper validates repetitions, data, and seed", {
+  data <- data.frame(X = 1:4, M = 2:5, Y = 3:6)
+  model <- app_test_env$generate_mediation_model("X", "M", "Y")
+
+  expect_error(
+    app_test_env$boot_indirect_ci(model, data, R = 0),
+    "positive integer",
+    fixed = TRUE
+  )
+  expect_error(
+    app_test_env$boot_indirect_ci(model, data[1:2, ], R = 2),
+    "at least three rows",
+    fixed = TRUE
+  )
+  expect_error(
+    app_test_env$boot_indirect_ci(model, data, R = 2, seed = -1),
+    "non-negative integer",
+    fixed = TRUE
+  )
 })
 
 test_that("analysis selections reject overlapping and non-numeric variables", {

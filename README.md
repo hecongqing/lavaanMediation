@@ -1,40 +1,48 @@
 # lavaanMediation
 
+English | [简体中文](README.zh-CN.md)
+
 [![R-CMD-check](https://github.com/hecongqing/lavaanMediation/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/hecongqing/lavaanMediation/actions/workflows/R-CMD-check.yaml)
 [![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 [![R >= 4.1](https://img.shields.io/badge/R-%3E%3D%204.1-276DC3.svg)](https://www.r-project.org/)
 
-`lavaanMediation` 是一个基于 [Shiny](https://shiny.posit.co/) 和
-[`lavaan`](https://lavaan.ugent.be/) 的交互式并行中介分析工具。它面向需要快速配置、检查并导出中介模型结果的研究者，同时保留完整的 `lavaan` 模型语法供复核。
+`lavaanMediation` is an interactive parallel mediation analysis tool built with
+[Shiny](https://shiny.posit.co/) and [`lavaan`](https://lavaan.ugent.be/). It
+helps researchers configure, inspect, and export mediation-model results while
+retaining the complete `lavaan` syntax for review and reproducibility.
 
-> 当前版本为 `0.2.0`。应用用于辅助模型设定和结果整理，不能替代研究设计、模型识别、因果假设与统计诊断。
+> The current version is `0.2.0`. The application assists with model
+> specification and result organization; it does not replace research design,
+> model-identification checks, causal assumptions, or statistical diagnostics.
 
-## 功能
+## Features
 
-- B1：`X → M → Y`，包含 `X → Y` 直接效应。
-- C2：在 B1 基础上加入一个或多个协变量 `Z`，并估计 `Z → M` 与 `Z → Y`。
-- 支持零个、单个或多个并行中介变量。
-- 手动 Bootstrap 间接效应置信区间，并报告成功重采样次数。
-- 展示模型语法、拟合指标、参数估计、R² 与路径图。
-- 将 Model Fit 和 Parameter Estimates（含主效应模型、中介模型及 R²）导出为 CSV。
-- 可上传 CSV，也可直接使用内置合成示例数据。
+- B1: `X → M → Y`, including the direct `X → Y` effect.
+- C2: B1 plus one or more covariates `Z`, with `Z → M` and `Z → Y` paths.
+- Zero, one, or multiple parallel mediators.
+- Manual Bootstrap confidence intervals for indirect effects, with the number
+  of successful resamples reported.
+- Model syntax, fit indices, parameter estimates, R² values, and path diagrams.
+- CSV exports for Model Fit and Parameter Estimates, including main-effect,
+  mediation-model, and R² results.
+- CSV upload and built-in synthetic demonstration data.
 
-## 安装
+## Installation
 
 ```r
 install.packages("remotes")
 remotes::install_github("hecongqing/lavaanMediation")
 ```
 
-## 运行
+## Running the app
 
-安装后在 R 中运行：
+After installation, run:
 
 ```r
 lavaanMediation::run_app()
 ```
 
-从源码运行：
+To run from source:
 
 ```bash
 git clone https://github.com/hecongqing/lavaanMediation.git
@@ -42,26 +50,27 @@ cd lavaanMediation
 Rscript start_app.R
 ```
 
-启动脚本不会自动修改你的 R 环境；如果缺少依赖，它会列出需要安装的包。
+The startup script does not modify your R environment automatically. If a
+dependency is missing, it reports the packages that need to be installed.
 
-## 数据要求
+## Data requirements
 
-CSV 第一行必须是变量名。进入模型的 X、M、Y、Z 必须：
+The first row of the CSV file must contain variable names. Variables selected
+as X, M, Y, or Z must:
 
-- 是数值列；
-- 在同一模型中互不重复；
-- 具有可供 `lavaan` 估计的有效样本；
-- 使用清晰且唯一的列名。
+- be numeric columns;
+- be assigned to only one role within a model;
+- contain enough usable observations for `lavaan` estimation; and
+- have clear, unique column names.
 
-仓库在 [`inst/extdata`](inst/extdata) 中提供三份合成示例数据：
+Two synthetic datasets are available under [`inst/extdata`](inst/extdata):
 
-- `mediation_demo.csv`：单中介示例；
-- `parallel_mediation_demo.csv`：多中介、多协变量示例；
-- `anonymized_mediation_demo.csv`：使用通用变量名的同类示例。
+- `mediation_demo.csv`: a single-mediator example;
+- `parallel_mediation_demo.csv`: a multiple-mediator, multiple-covariate example.
 
-## 模型语法
+## Model syntax
 
-单中介 B1：
+Single-mediator B1 model:
 
 ```text
 M ~ a1*X
@@ -71,7 +80,7 @@ indirect := a1*b1
 total := cprime + (a1*b1)
 ```
 
-包含协变量的 C2：
+C2 model with a covariate:
 
 ```text
 M ~ a1*X
@@ -83,39 +92,47 @@ indirect := a1*b1
 total := cprime + (a1*b1)
 ```
 
-多中介模型会为每个中介生成独立的 `a`、`b` 和 `indirect` 标签，并计算总间接效应。
+For multiple mediators, the app creates distinct `a`, `b`, and `indirect`
+labels for each mediator and calculates the total indirect effect.
 
-## 结果说明
+## Outputs
 
-- **Model Fit**：估计量、参数数、样本数、Bootstrap 次数、χ²、df、CFI、TLI、AIC、BIC、调整 BIC、RMSEA（90% CI）和 SRMR。
-- **Parameter Estimates**：主效应模型与中介模型的非标准化/标准化系数、标准误、z、p 和 95% CI。
-- **R²**：完整中介模型的 R²，以及用于效应保留比较的主效应模型 Y 的 R²。
-- **Path Diagram**：分别绘制主效应模型与中介模型，显示标准化系数。
-- **Download**：生成与当前分析配置一致的 CSV 文件。
+- **Model Fit**: estimator, number of parameters and observations, Bootstrap
+  count, χ², df, CFI, TLI, AIC, BIC, adjusted BIC, RMSEA with 90% CI, and SRMR.
+- **Parameter Estimates**: unstandardized and standardized coefficients,
+  standard errors, z statistics, p values, and 95% CIs for the main-effect and
+  mediation models.
+- **R²**: R² from the full mediation model and the main-effect-model R² for Y
+  used in the effect-conservation comparison.
+- **Path Diagram**: main-effect and mediation models with standardized
+  coefficients.
+- **Download**: CSV files generated from the fitted analysis configuration.
 
-## 项目结构
+## Project structure
 
 ```text
 lavaanMediation/
-├── R/                         # 对外包接口（run_app）
+├── R/                         # Public package interface (run_app)
 ├── inst/
 │   ├── app/
-│   │   ├── app.R             # 最小 Shiny 启动文件
-│   │   ├── R/                # 模型、结果、绘图、UI、Server
-│   │   └── www/              # 概念模型图片
-│   └── extdata/              # 合成示例数据
-├── tests/testthat/            # 模型、下载与 UI 测试
-├── .github/workflows/         # R CMD check
-├── start_app.R                # 源码启动入口
-└── deploy_app.R               # shinyapps.io 部署入口
+│   │   ├── app.R             # Minimal Shiny entry point
+│   │   ├── R/                # Modeling, results, plotting, UI, and server
+│   │   └── www/              # Concept-model images
+│   └── extdata/              # Synthetic example data
+├── tests/testthat/            # Model, download, and UI tests
+├── .github/workflows/         # R CMD check workflow
+├── start_app.R                # Source-tree launcher
+└── deploy_app.R               # shinyapps.io deployment entry point
 ```
 
-大型单文件应用已按职责拆分。结构参考了 [R Packages](https://r-pkgs.org/structure.html) 的包规范、
-[Posit 的包内 Shiny 应用建议](https://shiny.posit.co/r/articles/share/deployment-local)、
-[`golem`](https://github.com/ThinkR-open/golem) 的生产级职责分离思路，以及
-[`r-lib/actions`](https://github.com/r-lib/actions) 的 R 包持续集成方案。
+The application follows the package structure described in
+[R Packages](https://r-pkgs.org/structure.html), Posit's guidance for
+[Shiny applications in R packages](https://shiny.posit.co/r/articles/share/deployment-local),
+the separation-of-responsibilities approach used by
+[`golem`](https://github.com/ThinkR-open/golem), and the R package CI practices
+provided by [`r-lib/actions`](https://github.com/r-lib/actions).
 
-## 开发与检查
+## Development and checks
 
 ```r
 install.packages(c("devtools", "testthat"))
@@ -123,8 +140,10 @@ devtools::test()
 devtools::check()
 ```
 
-提交问题前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
+See [QUICKSTART.md](QUICKSTART.md) for a short walkthrough,
+[USAGE.md](USAGE.md) for detailed usage, and
+[CONTRIBUTING.md](CONTRIBUTING.md) before submitting an issue or pull request.
 
-## 许可证
+## License
 
 [MIT License](LICENSE.md) © 2026 Congqing He
