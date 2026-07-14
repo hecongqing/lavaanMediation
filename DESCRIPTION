@@ -1,22 +1,31 @@
 Package: lavaanMediation
 Type: Package
-Title: What the Package Does (Title Case)
-Version: 0.1.0
+Title: Interactive Parallel Mediation Analysis with 'lavaan'
+Version: 0.2.0
 Authors@R: c(
     person(
-      "Jane", "Doe",
-      email = "jane@example.com",
+      "Congqing", "He",
+      email = "hecongqing@hotmail.com",
       role = c("aut", "cre")
     )
   )
-Description: More about what it does (maybe more than one line).
-    Continuation lines should be indented.
-License: What license is it under?
+Description: Provides a Shiny interface for fitting and exploring parallel
+    mediation models with 'lavaan'. The application supports multiple
+    mediators, optional covariates, bootstrap confidence intervals for
+    indirect effects, model-fit summaries, parameter tables, path diagrams,
+    and downloadable results.
+License: MIT + file LICENSE
 Encoding: UTF-8
-LazyData: true
+Depends:
+    R (>= 4.1.0)
 Imports: 
-    bslib,
-    lavaan,
-    semPlot,
-    shiny
+    htmltools (>= 0.5.7),
+    lavaan (>= 0.6-15),
+    semPlot (>= 1.1.6),
+    shiny (>= 1.7.0)
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+URL: https://github.com/hecongqing/lavaanMediation
+BugReports: https://github.com/hecongqing/lavaanMediation/issues
 RoxygenNote: 7.3.2

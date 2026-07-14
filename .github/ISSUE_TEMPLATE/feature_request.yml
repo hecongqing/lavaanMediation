@@ -1,0 +1,24 @@
+name: Feature request
+description: Suggest an improvement or a new supported analysis workflow.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: What research or analysis problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the inputs, model behavior, and expected outputs.
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: Statistical references
+      description: Link to relevant methods papers or software documentation when applicable.

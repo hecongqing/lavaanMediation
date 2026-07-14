@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: "If you use lavaanMediation, please cite the software and the lavaan package."
+title: "lavaanMediation: Interactive Parallel Mediation Analysis with lavaan"
+type: software
+authors:
+  - family-names: He
+    given-names: Congqing
+    email: hecongqing@hotmail.com
+repository-code: "https://github.com/hecongqing/lavaanMediation"
+url: "https://github.com/hecongqing/lavaanMediation"
+license: MIT
+version: 0.2.0
+date-released: 2026-07-14

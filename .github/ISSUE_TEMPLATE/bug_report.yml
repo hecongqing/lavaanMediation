@@ -1,0 +1,31 @@
+name: Bug report
+description: Report a reproducible problem in the package or Shiny app.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thank you for helping improve lavaanMediation. Do not upload confidential research data.
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem
+      description: Describe what happened and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproducible example
+      description: Provide minimal R code or a small synthetic CSV and the selected model settings.
+      render: R
+    validations:
+      required: true
+  - type: textarea
+    id: session
+    attributes:
+      label: Session information
+      description: Paste the output of sessionInfo().
+      render: text
+    validations:
+      required: true

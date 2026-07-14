@@ -1,2 +1,14 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
+^\.github$
+^LICENSE\.md$
+^CONTRIBUTING\.md$
+^CODE_OF_CONDUCT\.md$
+^CITATION\.cff$
+^QUICKSTART\.md$
+^USAGE\.md$
+^start_app\.R$
+^deploy_app\.R$
+^inst/app/rsconnect$
+^lavaanMediation.*\.tar\.gz$
+^lavaanMediation\.Rcheck$

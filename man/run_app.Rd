@@ -2,10 +2,18 @@
 % Please edit documentation in R/run_app.R
 \name{run_app}
 \alias{run_app}
-\title{启动 Shiny 中介分析 App}
+\title{Run the Interactive Mediation Analysis App}
 \usage{
-run_app()
+run_app(launch.browser = interactive(), ...)
+}
+\arguments{
+\item{launch.browser}{Whether to open the application in a web browser. Defaults to \code{interactive()}.}
+
+\item{...}{Additional arguments passed to \code{shiny::runApp()}.}
+}
+\value{
+The value returned by \code{shiny::runApp()}. This function normally blocks until the application is stopped.
 }
 \description{
-启动 Shiny 中介分析 App
+Launches the Shiny application bundled with the package.
 }
