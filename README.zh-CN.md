@@ -46,6 +46,54 @@ Rscript start_app.R
 
 启动脚本不会自动修改你的 R 环境；如果缺少依赖，它会列出需要安装的包。
 
+## 部署到 shinyapps.io
+
+首先安装 [`rsconnect`](https://rstudio.github.io/rsconnect/)，并在本地 R 控制台中配置一次 shinyapps.io 账号：
+
+```r
+install.packages("rsconnect")
+
+rsconnect::setAccountInfo(
+  name = "<账号名>",
+  token = "<TOKEN>",
+  secret = "<SECRET>"
+)
+```
+
+不要把 token 或 secret 写入源代码、命令行参数、Git 历史或部署日志。应使用 shinyapps.io Tokens 页面生成的命令；如果凭据曾被公开，应立即撤销并重新生成。
+
+在仓库根目录执行项目自带的部署脚本：
+
+```bash
+Rscript deploy_app.R <账号名> <应用名>
+```
+
+例如：
+
+```bash
+Rscript deploy_app.R congqing mediation-app
+```
+
+脚本会把 `inst/app/` 部署到 shinyapps.io。使用上述示例时，应用地址为：
+
+```text
+https://congqing.shinyapps.io/mediation-app/
+```
+
+以后更新应用时，重复执行同一条部署命令即可。可以在 R 中查看应用状态和服务器日志：
+
+```r
+rsconnect::applications(account = "congqing", server = "shinyapps.io")
+rsconnect::showLogs(
+  appName = "mediation-app",
+  account = "congqing",
+  server = "shinyapps.io",
+  streaming = FALSE
+)
+```
+
+如果返回 HTTP 409，表示同一个应用已有部署任务正在运行。此时应等待现有任务完成，不要重复发起部署。更多选项请参阅 shinyapps.io [官方入门文档](https://docs.posit.co/shinyapps.io/guide/getting_started/)和 [`deployApp()` 文档](https://rstudio.github.io/rsconnect/reference/deployApp.html)。
+
 ## 数据要求
 
 CSV 第一行必须是变量名。进入模型的 X、M、Y、Z 必须：
